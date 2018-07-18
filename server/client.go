@@ -10,13 +10,21 @@ package server
 import (
 	"bufio"
 	"bytes"
-	"fmt"
+	"errors"
 	"io"
+	"log"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/yongman/go/goredis"
 	"github.com/yongman/leto/store"
+)
+
+var (
+	ErrParams        = errors.New("ERR params invalid")
+	ErrRespType      = errors.New("ERR resp type invalid")
+	ErrCmdNotSupport = errors.New("ERR command not supported")
 )
 
 type Command struct {
@@ -38,12 +46,15 @@ type Client struct {
 
 	rReader *goredis.RespReader
 	rWriter *goredis.RespWriter
+
+	logger *log.Logger
 }
 
 func newClient(app *App) *Client {
 	client := &Client{
-		app:   app,
-		store: app.store,
+		app:    app,
+		store:  app.store,
+		logger: log.New(os.Stderr, "[client] ", log.LstdFlags),
 	}
 	return client
 }
@@ -80,7 +91,7 @@ func (c *Client) Resp(resp interface{}) error {
 	case error:
 		err = c.rWriter.WriteError(v)
 	default:
-		err = fmt.Errorf("unknown resp type")
+		err = ErrRespType
 	}
 
 	return err
@@ -112,7 +123,7 @@ func (c *Client) Resp1(resp interface{}) error {
 	case error:
 		err = c.rWriter.WriteError(v)
 	default:
-		err = fmt.Errorf("unknown resp type")
+		err = ErrRespType
 	}
 
 	return err
@@ -129,14 +140,14 @@ func (c *Client) connHandler() {
 
 		req, err := c.rReader.ParseRequest()
 		if err != nil && err != io.EOF {
-			fmt.Println(err.Error())
+			c.logger.Println(err.Error())
 			return
 		} else if err != nil {
 			return
 		}
 		err = c.handleRequest(req)
 		if err != nil && err != io.EOF {
-			fmt.Println(err.Error())
+			c.logger.Println(err.Error())
 			return
 		}
 	}
@@ -151,52 +162,47 @@ func (c *Client) handleRequest(req [][]byte) error {
 		c.args = req[1:]
 	}
 
+	var (
+		err error
+		v   string
+	)
+
+	c.logger.Printf("process %s command", c.cmd)
+
 	switch c.cmd {
 	case "get":
-		if len(c.args) != 1 {
-			c.FlushResp(fmt.Errorf("params error"))
-			return nil
+		if v, err = c.handleGet(); err == nil {
+			c.FlushResp(v)
 		}
-		key := string(c.args[0])
-		v, err := c.store.Get(key)
-		if err != nil {
-			c.FlushResp(err)
-			return err
-		}
-		c.FlushResp(v)
 	case "set":
-		if len(c.args) != 2 {
-			c.FlushResp(fmt.Errorf("params error"))
-			return nil
-		}
-		key := string(c.args[0])
-		value := string(c.args[1])
-		err := c.store.Set(key, value)
-		if err != nil {
-			c.FlushResp(err)
-			return err
+		if err = c.handleSet(); err == nil {
+			c.FlushResp("OK")
 		}
 	case "del":
-		if len(c.args) != 1 {
-			c.FlushResp(fmt.Errorf("params error"))
-			return nil
+		if err = c.handleDel(); err == nil {
+			c.FlushResp("OK")
 		}
-		key := string(c.args[0])
-		err := c.store.Delete(key)
-		if err != nil {
-			c.FlushResp(err)
-			return err
+	case "join":
+		if err = c.handleJoin(); err == nil {
+			c.FlushResp("OK")
+		}
+	case "leave":
+		if err = c.handleLeave(); err == nil {
+			c.FlushResp("OK")
 		}
 	case "ping":
 		if len(c.args) != 0 {
-			c.FlushResp(fmt.Errorf("params error"))
-			return nil
+			err = ErrParams
 		}
 		c.FlushResp("PONG")
+		err = nil
 
 	default:
-		c.FlushResp(fmt.Errorf("not support command"))
+		err = ErrCmdNotSupport
+	}
+	if err != nil {
+		c.FlushResp(err)
 	}
 
-	return nil
+	return err
 }

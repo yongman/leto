@@ -18,15 +18,19 @@ import (
 )
 
 var (
-	listen    string
-	nodeID    string
-	bootstrap bool
+	listen   string
+	raftdir  string
+	raftbind string
+	nodeID   string
+	join     string
 )
 
 func init() {
 	flag.StringVar(&listen, "listen", ":5379", "server listen address")
+	flag.StringVar(&raftdir, "raftdir", "./", "raft data directory")
+	flag.StringVar(&raftbind, "raftbind", ":15379", "raft bus transport bind address")
 	flag.StringVar(&nodeID, "id", "", "node id")
-	flag.BoolVar(&bootstrap, "bootstrap", false, "bootstrap raft")
+	flag.StringVar(&join, "join", "", "join to already exist cluster")
 }
 
 func main() {
@@ -36,7 +40,7 @@ func main() {
 		c *config.Config
 	)
 
-	c = config.NewConfig(listen, nodeID, bootstrap)
+	c = config.NewConfig(listen, raftdir, raftbind, nodeID, join)
 
 	app := server.NewApp(c)
 

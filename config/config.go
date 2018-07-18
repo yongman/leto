@@ -1,17 +1,21 @@
 package config
 
 type Config struct {
-	Desc      string
-	Listen    string
-	Bootstrap bool
-	NodeID    string
+	Desc     string
+	Listen   string
+	RaftDir  string
+	RaftBind string
+	Join     string
+	NodeID   string
 }
 
-func NewConfig(listen, nodeid string, bootstrap bool) *Config {
+func NewConfig(listen, raftdir, raftbind, nodeid, join string) *Config {
 	return &Config{
-		Listen:    listen,
-		NodeID:    nodeid,
-		Bootstrap: bootstrap,
-		Desc:      "",
+		Listen:   listen,
+		RaftDir:  raftdir,
+		RaftBind: raftbind,
+		NodeID:   nodeid,
+		Join:     join,
+		Desc:     "",
 	}
 }

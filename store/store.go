@@ -33,12 +33,14 @@ var (
 	ErrNotLeader error = errors.New("not leader")
 )
 
-func NewStore() *Store {
+func NewStore(raftdir, raftbind string) *Store {
 	return &Store{
 		logger: log.New(os.Stderr, "[store] ", log.LstdFlags),
 		fsm: &fsm{
 			m: make(map[string]string),
 		},
+		RaftDir:  raftdir,
+		RaftBind: raftbind,
 	}
 }
 
