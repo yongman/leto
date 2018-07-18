@@ -9,34 +9,36 @@ package store
 import (
 	"encoding/json"
 	"io"
+	"log"
+	"os"
 	"strings"
-	"sync"
 
 	"github.com/hashicorp/raft"
 )
 
 type fsm struct {
-	// just a sample in-memory storage fsm
-	// this will replace with a storage such as bolt/badger/goleveldb etc.
-	mu sync.Mutex
-	m  map[string]string
+	db DB
+
+	logger *log.Logger
 }
 
-func NewFSM() *fsm {
-	return &fsm{
-		m: make(map[string]string),
+func NewFSM(path string) (*fsm, error) {
+	db, err := NewBadgerDB(path, path)
+	if err != nil {
+		return nil, err
 	}
+	return &fsm{
+		logger: log.New(os.Stderr, "[fsm] ", log.LstdFlags),
+		db:     db,
+	}, nil
 }
 
 func (f *fsm) Get(key string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	v, ok := f.m[key]
-	if !ok {
-		return "", nil
+	v, err := f.db.Get([]byte(key))
+	if err != nil {
+		return "", err
 	}
-	return v, nil
+	return string(v), nil
 }
 
 func (f *fsm) Apply(l *raft.Log) interface{} {
@@ -66,19 +68,18 @@ func (f *fsm) Restore(rc io.ReadCloser) error {
 }
 
 func (f *fsm) applySet(key, value string) interface{} {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.logger.Printf("apply %s to %s\n", key, value)
+	err := f.db.Set([]byte(key), []byte(value))
 
-	f.m[key] = value
-
-	return nil
+	return err
 }
 
 func (f *fsm) applyDelete(key string) interface{} {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	_, err := f.db.Delete([]byte(key))
+	return err
+}
 
-	delete(f.m, key)
-
+func (f *fsm) Close() error {
+	f.db.Close()
 	return nil
 }

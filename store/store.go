@@ -33,15 +33,17 @@ var (
 	ErrNotLeader error = errors.New("not leader")
 )
 
-func NewStore(raftdir, raftbind string) *Store {
+func NewStore(raftdir, raftbind string) (*Store, error) {
+	fsm, err := NewFSM(raftdir)
+	if err != nil {
+		return nil, err
+	}
 	return &Store{
-		logger: log.New(os.Stderr, "[store] ", log.LstdFlags),
-		fsm: &fsm{
-			m: make(map[string]string),
-		},
+		logger:   log.New(os.Stderr, "[store] ", log.LstdFlags),
+		fsm:      fsm,
 		RaftDir:  raftdir,
 		RaftBind: raftbind,
-	}
+	}, nil
 }
 
 func (s *Store) Open(bootstrap bool, localID string) error {

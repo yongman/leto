@@ -27,12 +27,17 @@ func NewApp(conf *config.Config) *App {
 
 	app.logger = log.New(os.Stderr, "[server] ", log.LstdFlags)
 
-	app.store = store.NewStore(conf.RaftDir, conf.RaftBind)
+	app.store, err = store.NewStore(conf.RaftDir, conf.RaftBind)
+	if err != nil {
+		app.logger.Println(err.Error())
+		panic(err.Error())
+	}
 
 	bootstrap := conf.Join == ""
 	err = app.store.Open(bootstrap, conf.NodeID)
 	if err != nil {
 		app.logger.Println(err.Error())
+		panic(err.Error())
 	}
 
 	if !bootstrap {
