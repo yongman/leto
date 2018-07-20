@@ -15,6 +15,16 @@ type BadgerDB struct {
 	db       *badger.DB
 }
 
+type KVItem struct {
+	key   []byte
+	value []byte
+	err   error
+}
+
+func (i *KVItem) IsFinished() bool {
+	return i.err == ErrIterFinished
+}
+
 func NewBadgerDB(dir, valueDir string) (*BadgerDB, error) {
 	opts := badger.DefaultOptions
 	opts.Dir = dir
@@ -77,6 +87,49 @@ func (b *BadgerDB) Delete(key []byte) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (b *BadgerDB) SnapshotItems() <-chan DataItem {
+	// create a new channel
+	ch := make(chan DataItem, 1024)
+
+	// generate items from snapshot to channel
+	go b.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			k := item.Key()
+			v, err := item.Value()
+
+			kvi := &KVItem{
+				key:   append([]byte{}, k...),
+				value: append([]byte{}, v...),
+				err:   err,
+			}
+
+			// write kvitem to channel with last error
+			ch <- kvi
+
+			if err != nil {
+				return err
+			}
+		}
+
+		// just use nil kvitem to mark the end
+		kvi := &KVItem{
+			key:   nil,
+			value: nil,
+			err:   ErrIterFinished,
+		}
+		ch <- kvi
+
+		return nil
+	})
+
+	// return channel to persist
+	return ch
 }
 
 func (b *BadgerDB) Close() {

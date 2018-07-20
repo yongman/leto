@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/raft"
 )
 
@@ -57,13 +58,61 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 	}
 }
 
-// TODO
+// generate FSMSnapshot
+// Snapshot will be called duiring make snapshot
 func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
-	return &fsmSnapshot{}, nil
+	return &fsmSnapshot{
+		db: f.db,
+	}, nil
 }
 
-// TODO
+// restore from FSMSnapshot
 func (f *fsm) Restore(rc io.ReadCloser) error {
+	defer rc.Close()
+
+	var (
+		readBuf       []byte
+		incompleteBuf []byte = []byte{}
+		protoBuf      *proto.Buffer
+		readLength    int
+		err           error
+	)
+	// decode message from protobuf
+	// read 1M block data a time
+	for {
+		readBuf = make([]byte, 1024*1024)
+		if readLength, err = rc.Read(readBuf); err == io.EOF {
+			// read done completely
+			break
+		}
+		// append after last incomplete message
+		readBuf = append(incompleteBuf, readBuf...)
+		if err != nil {
+			f.logger.Printf("Snapshot restore failed %v", err)
+			return err
+		}
+		protoBuf = proto.NewBuffer(readBuf[:readLength])
+		// decode messages from 1M block file
+		// the last message could decode failed with io.ErrUnexpectedEOF
+		for {
+			item := &ProtoKVItem{}
+			if err = protoBuf.DecodeMessage(item); err == io.ErrUnexpectedEOF {
+				incompleteBuf = protoBuf.Bytes()
+				break
+			}
+			if err != nil {
+				f.logger.Printf("DecodeMessage failed %v", err)
+				return err
+			}
+			// apply item to store
+			err = f.db.Set(item.Key, item.Value)
+			if err != nil {
+				f.logger.Printf("Snapshot load failed %v", err)
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
