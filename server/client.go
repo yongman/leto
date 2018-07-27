@@ -196,6 +196,10 @@ func (c *Client) handleRequest(req [][]byte) error {
 		}
 		c.FlushResp("PONG")
 		err = nil
+	case "snapshot":
+		if err = c.handleSnapshot(); err == nil {
+			c.FlushResp("OK")
+		}
 
 	default:
 		err = ErrCmdNotSupport

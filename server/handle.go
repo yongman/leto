@@ -64,3 +64,15 @@ func (c *Client) handleDel() error {
 	}
 	return nil
 }
+
+func (c *Client) handleSnapshot() error {
+	if len(c.args) != 0 {
+		return ErrParams
+	}
+	err := c.store.Snapshot()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

@@ -49,6 +49,7 @@ func NewStore(raftdir, raftbind string) (*Store, error) {
 func (s *Store) Open(bootstrap bool, localID string) error {
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(localID)
+	config.SnapshotThreshold = 1024
 
 	addr, err := net.ResolveTCPAddr("tcp", s.RaftBind)
 	if err != nil {
@@ -183,4 +184,10 @@ func (s *Store) Leave(nodeID string) error {
 	s.logger.Printf("node %s not exists in raft group", nodeID)
 
 	return nil
+}
+
+func (s *Store) Snapshot() error {
+	s.logger.Printf("doing snapshot mannually")
+	f := s.raft.Snapshot()
+	return f.Error()
 }

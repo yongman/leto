@@ -7,12 +7,18 @@
 
 package store
 
-import "github.com/dgraph-io/badger"
+import (
+	"log"
+	"os"
+
+	"github.com/dgraph-io/badger"
+)
 
 type BadgerDB struct {
 	dir      string
 	valueDir string
 	db       *badger.DB
+	logger   *log.Logger
 }
 
 type KVItem struct {
@@ -29,6 +35,7 @@ func NewBadgerDB(dir, valueDir string) (*BadgerDB, error) {
 	opts := badger.DefaultOptions
 	opts.Dir = dir
 	opts.ValueDir = valueDir
+	opts.SyncWrites = false
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, err
@@ -38,6 +45,7 @@ func NewBadgerDB(dir, valueDir string) (*BadgerDB, error) {
 		dir:      dir,
 		valueDir: valueDir,
 		db:       db,
+		logger:   log.New(os.Stderr, "[db_badger] ", log.LstdFlags),
 	}, nil
 }
 
@@ -98,6 +106,9 @@ func (b *BadgerDB) SnapshotItems() <-chan DataItem {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		keyCount := 0
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
 			k := item.Key()
@@ -111,6 +122,7 @@ func (b *BadgerDB) SnapshotItems() <-chan DataItem {
 
 			// write kvitem to channel with last error
 			ch <- kvi
+			keyCount = keyCount + 1
 
 			if err != nil {
 				return err
@@ -124,6 +136,8 @@ func (b *BadgerDB) SnapshotItems() <-chan DataItem {
 			err:   ErrIterFinished,
 		}
 		ch <- kvi
+
+		b.logger.Printf("Snapshot total %d keys", keyCount)
 
 		return nil
 	})
