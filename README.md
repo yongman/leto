@@ -89,6 +89,8 @@ OK
 
 - GET
 - SET
+- DELETE
 - JOIN (communicate with peer when start node)
 - LEAVE (remove dead node from raft group)
 - PING
+- SNAPSHOT (trigger snapshot mannually)
